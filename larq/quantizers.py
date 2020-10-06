@@ -76,6 +76,25 @@ def _clipped_gradient(x, dy, clip_value):
     mask = tf.math.less_equal(tf.math.abs(x), clip_value)
     return tf.where(mask, dy, zeros)
 
+def _clipped_shifted_gradient(x, dy, clip_value, mean_value):
+    """Calculate `clipped_gradent * dy`."""
+
+    if clip_value is None:
+        return dy
+
+    zeros = tf.zeros_like(dy)
+    mask = tf.math.less_equal(tf.math.abs(x-mean_value), clip_value)
+    return tf.where(mask, dy, zeros)
+
+def ste_shift_sign(x: tf.Tensor, clip_value: float = 1.0, shift_value: float = 0.0) -> tf.Tensor:
+    @tf.custom_gradient
+    def _call(x):
+        def grad(dy):
+            return _clipped_shifted_gradient(x, dy, clip_value, shift_value)
+
+        return math.sign(x-shift_value), grad
+
+    return _call(x)
 
 def ste_sign(x: tf.Tensor, clip_value: float = 1.0) -> tf.Tensor:
     @tf.custom_gradient
@@ -261,6 +280,55 @@ class SteSign(BaseQuantizer):
 
     def get_config(self):
         return {**super().get_config(), "clip_value": self.clip_value}
+
+
+@utils.register_alias("ste_shift_sign")
+@utils.register_keras_custom_object
+class SteShiftSign(BaseQuantizer):
+    r"""Instantiates a serializable binary quantizer.
+
+    \\[
+    q(x) = \begin{cases}
+      -1 & x < \texttt{shift_value} \\\
+      1 & x \geq \texttt{shift_value}
+    \end{cases}
+    \\]
+
+    The gradient is estimated using the Straight-Through Estimator
+    (essentially the binarization is replaced by a clipped identity on the
+    backward pass).
+    \\[\frac{\partial q(x)}{\partial x} = \begin{cases}
+      1 & \left|x - \texttt{shift_value}\right| \leq \texttt{clip_value} \\\
+      0 & \left|x - \texttt{shift_value}\right| > \texttt{clip_value}
+    \end{cases}\\]
+
+    ```plot-activation
+    quantizers.SteShiftSign
+    ```
+
+    # Arguments
+        clip_value: Threshold for clipping gradients. If `None` gradients are not
+            clipped.
+        shift_value: Threshold for the activtion.
+        metrics: An array of metrics to add to the layer. If `None` the metrics set in
+            `larq.context.metrics_scope` are used. Currently only the `flip_ratio`
+            metric is available.
+
+    # References
+    """
+    precision = 1
+
+    def __init__(self, clip_value: float = 1.0, shift_value: float = 0.0, **kwargs):
+        self.clip_value = clip_value
+        self.shift_value = shift_value
+        super().__init__(**kwargs)
+
+    def call(self, inputs):
+        outputs = ste_shift_sign(inputs, clip_value=self.clip_value, shift_value=self.shift_value)
+        return super().call(outputs)
+
+    def get_config(self):
+        return {**super().get_config(), "clip_value": self.clip_value, "shift_value": self.shift_value}
 
 
 @utils.register_alias("approx_sign")
