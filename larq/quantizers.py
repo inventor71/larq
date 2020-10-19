@@ -61,6 +61,7 @@ __all__ = [
     "NoOpQuantizer",
     "SteHeaviside",
     "SteSign",
+    "SteShiftSign",
     "SteTern",
     "SwishSign",
 ]
@@ -76,6 +77,7 @@ def _clipped_gradient(x, dy, clip_value):
     mask = tf.math.less_equal(tf.math.abs(x), clip_value)
     return tf.where(mask, dy, zeros)
 
+
 def _clipped_shifted_gradient(x, dy, clip_value, mean_value):
     """Calculate `clipped_gradent * dy`."""
 
@@ -86,15 +88,6 @@ def _clipped_shifted_gradient(x, dy, clip_value, mean_value):
     mask = tf.math.less_equal(tf.math.abs(x-mean_value), clip_value)
     return tf.where(mask, dy, zeros)
 
-def ste_shift_sign(x: tf.Tensor, clip_value: float = 1.0, shift_value: float = 0.0) -> tf.Tensor:
-    @tf.custom_gradient
-    def _call(x):
-        def grad(dy):
-            return _clipped_shifted_gradient(x, dy, clip_value, shift_value)
-
-        return math.sign(x-shift_value), grad
-
-    return _call(x)
 
 def ste_sign(x: tf.Tensor, clip_value: float = 1.0) -> tf.Tensor:
     @tf.custom_gradient
@@ -103,6 +96,17 @@ def ste_sign(x: tf.Tensor, clip_value: float = 1.0) -> tf.Tensor:
             return _clipped_gradient(x, dy, clip_value)
 
         return math.sign(x), grad
+
+    return _call(x)
+
+
+def ste_shift_sign(x: tf.Tensor, clip_value: float = 1.0, shift_value: float = 0.0) -> tf.Tensor:
+    @tf.custom_gradient
+    def _call(x):
+        def grad(dy):
+            return _clipped_shifted_gradient(x, dy, clip_value, shift_value)
+
+        return math.sign(x-shift_value), grad
 
     return _call(x)
 
