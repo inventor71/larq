@@ -61,8 +61,9 @@ __all__ = [
     "NoOpQuantizer",
     "SteHeaviside",
     "SteSign",
+    "SteUnsign",
     "SteShiftSign",
-    "SteShiftUnsigned",
+    "SteShiftUnsign",
     "SteTern",
     "SwishSign",
 ]
@@ -101,6 +102,17 @@ def ste_sign(x: tf.Tensor, clip_value: float = 1.0) -> tf.Tensor:
     return _call(x)
 
 
+def ste_unsign(x: tf.Tensor, clip_value: float = 0.5) -> tf.Tensor:
+    @tf.custom_gradient
+    def _call(x):
+        def grad(dy):
+            return _clipped_gradient(x, dy, clip_value)
+
+        return 0.5*math.sign(x) + 0.5, grad
+
+    return _call(x)
+
+
 def ste_shift_sign(x: tf.Tensor, clip_value: float = 1.0, shift_value: float = 0.0) -> tf.Tensor:
     @tf.custom_gradient
     def _call(x):
@@ -112,7 +124,7 @@ def ste_shift_sign(x: tf.Tensor, clip_value: float = 1.0, shift_value: float = 0
     return _call(x)
 
 
-def ste_shift_unsigned(x: tf.Tensor, clip_value: float = 0.5, shift_value: float = 0.0) -> tf.Tensor:
+def ste_shift_unsign(x: tf.Tensor, clip_value: float = 0.5, shift_value: float = 0.0) -> tf.Tensor:
     @tf.custom_gradient
     def _call(x):
         def grad(dy):
@@ -298,6 +310,53 @@ class SteSign(BaseQuantizer):
         return {**super().get_config(), "clip_value": self.clip_value}
 
 
+@utils.register_alias("ste_unsign")
+@utils.register_keras_custom_object
+class SteUnsign(BaseQuantizer):
+    r"""Instantiates a serializable binary quantizer.
+
+    \\[
+    q(x) = \begin{cases}
+      0 & x < 0 \\\
+      1 & x \geq 0
+    \end{cases}
+    \\]
+
+    The gradient is estimated using the Straight-Through Estimator
+    (essentially the binarization is replaced by a clipped identity on the
+    backward pass).
+    \\[\frac{\partial q(x)}{\partial x} = \begin{cases}
+      1 & \left|x\right| \leq \texttt{clip_value} \\\
+      0 & \left|x\right| > \texttt{clip_value}
+    \end{cases}\\]
+
+    ```plot-activation
+    quantizers.SteUnsign
+    ```
+
+    # Arguments
+        clip_value: Threshold for clipping gradients. If `None` gradients are not
+            clipped.
+        metrics: An array of metrics to add to the layer. If `None` the metrics set in
+            `larq.context.metrics_scope` are used. Currently only the `flip_ratio`
+            metric is available.
+
+    # References
+    """
+    precision = 1
+
+    def __init__(self, clip_value: float = 1.0, **kwargs):
+        self.clip_value = clip_value
+        super().__init__(**kwargs)
+
+    def call(self, inputs):
+        outputs = ste_unsign(inputs, clip_value=self.clip_value)
+        return super().call(outputs)
+
+    def get_config(self):
+        return {**super().get_config(), "clip_value": self.clip_value}
+
+
 @utils.register_alias("ste_shift_sign")
 @utils.register_keras_custom_object
 class SteShiftSign(BaseQuantizer):
@@ -347,9 +406,9 @@ class SteShiftSign(BaseQuantizer):
         return {**super().get_config(), "clip_value": self.clip_value, "shift_value": self.shift_value}
 
 
-@utils.register_alias("ste_shift_unsigned")
+@utils.register_alias("ste_shift_unsign")
 @utils.register_keras_custom_object
-class SteShiftUnsigned(BaseQuantizer):
+class SteShiftUnsign(BaseQuantizer):
     r"""Instantiates a serializable binary quantizer.
 
     \\[
@@ -368,7 +427,7 @@ class SteShiftUnsigned(BaseQuantizer):
     \end{cases}\\]
 
     ```plot-activation
-    quantizers.SteShiftUnsigned
+    quantizers.SteShiftUnsign
     ```
 
     # Arguments
@@ -389,7 +448,7 @@ class SteShiftUnsigned(BaseQuantizer):
         super().__init__(**kwargs)
 
     def call(self, inputs):
-        outputs = ste_shift_unsigned(inputs, clip_value=self.clip_value, shift_value=self.shift_value)
+        outputs = ste_shift_unsign(inputs, clip_value=self.clip_value, shift_value=self.shift_value)
         return super().call(outputs)
 
     def get_config(self):
