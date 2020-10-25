@@ -26,9 +26,12 @@ import tensorflow as tf
 
 from larq import utils
 
+__all__ = [
+    "HardTanh",
+]
 
 @utils.register_keras_custom_object
-def hard_tanh(x: tf.Tensor) -> tf.Tensor:
+def hard_tanh(x: tf.Tensor, lower_b=-1.0, upper_b=1.0) -> tf.Tensor:
     """Hard tanh activation function.
     ```plot-activation
     activations.hard_tanh
@@ -36,11 +39,13 @@ def hard_tanh(x: tf.Tensor) -> tf.Tensor:
 
     # Arguments
         x: Input tensor.
+        lower_b: lower bound for hardtanh
+        upper_b: upper bound for hardtanh
 
     # Returns
         Hard tanh activation.
     """
-    return tf.clip_by_value(x, -1, 1)
+    return tf.clip_by_value(x, lower_b, upper_b)
 
 
 @utils.register_keras_custom_object
@@ -64,3 +69,26 @@ def leaky_tanh(x: tf.Tensor, alpha: float = 0.2) -> tf.Tensor:
         + (tf.math.maximum(x, 1) - 1) * alpha
         + (tf.math.minimum(x, -1) + 1) * alpha
     )
+
+
+@utils.register_alias("hard_tanh")
+@utils.register_keras_custom_object
+class HardTanh(tf.keras.layers.Layer):
+
+    def __init__(self, lower_b: float = -1.0, upper_b: float = 1.0, **kwargs):
+        self.lower_b = lower_b
+        self.upper_b = upper_b
+        super().__init__(**kwargs)
+
+    def call(self, inputs):
+        return hard_tanh(inputs, lower_b=self.lower_b, upper_b=self.upper_b)
+
+    def get_config(self):
+        return {**super().get_config(), "lower_b": self.lower_b, "upper_b": self.upper_b}
+
+    @property
+    def non_trainable_weights(self):
+        return []
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
