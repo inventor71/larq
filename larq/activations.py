@@ -28,6 +28,7 @@ from larq import utils
 
 __all__ = [
     "HardTanh",
+    "HardSigmoid",
 ]
 
 @utils.register_keras_custom_object
@@ -46,6 +47,22 @@ def hard_tanh(x: tf.Tensor, lower_b=-1.0, upper_b=1.0) -> tf.Tensor:
         Hard tanh activation.
     """
     return tf.clip_by_value(x, lower_b, upper_b)
+
+
+@utils.register_keras_custom_object
+def hard_sigmoid(x: tf.Tensor) -> tf.Tensor:
+    """Hard sigmoid activation function.
+    ```plot-activation
+    activations.hard_sigmoid
+    ```
+
+    # Arguments
+        x: Input tensor.
+
+    # Returns
+        Hard sigmoid activation.
+    """
+    return tf.clip_by_value(x+0.5, 0.0, 1.0)
 
 
 @utils.register_keras_custom_object
@@ -85,6 +102,27 @@ class HardTanh(tf.keras.layers.Layer):
 
     def get_config(self):
         return {**super().get_config(), "lower_b": self.lower_b, "upper_b": self.upper_b}
+
+    @property
+    def non_trainable_weights(self):
+        return []
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+
+@utils.register_alias("hard_sigmoid")
+@utils.register_keras_custom_object
+class HardSigmoid(tf.keras.layers.Layer):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def call(self, inputs):
+        return hard_sigmoid(inputs)
+
+    def get_config(self):
+        return {**super().get_config()}
 
     @property
     def non_trainable_weights(self):
